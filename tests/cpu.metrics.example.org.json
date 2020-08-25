@@ -1,5 +1,5 @@
 {
-  "meta": {
+  "manifest": {
     "domain": "example.org",
     "scope": "metrics",
     "kind": "cpu",
@@ -10,7 +10,7 @@
       "foo": "bar"
     }
   },
-  "data": {
+  "content": {
     "begin": "2020-08-24T16:01:18Z",
     "end": "2020-08-24T16:02:18Z",
     "interval_seconds": 10,

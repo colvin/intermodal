@@ -1,43 +1,128 @@
+//! Data enveloping format.
+//!
+//! A common structure into which data is embedded that provides a manifest of the type or schema
+//! of the data as well as other identifying or contextualizing metadata.
+
 use std::collections::HashMap;
 
+/// An elemental data structure consisting of only a manifest.
+///
+/// All types derived from the `intermodal` scheme should be able to be deserialized into an
+/// `Object`. Generic data handlers can expect to deserialize messages into this type and use the
+/// manifest to determine a more precise type for the message.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Object {
-    pub meta: Meta,
+    pub manifest: Manifest,
 }
 
 impl<T> From<DataObject<T>> for Object {
-    fn from(data: DataObject<T>) -> Object {
-        Object { meta: data.meta }
-    }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Meta {
-    pub domain: String,
-    pub scope: String,
-    pub kind: String,
-    pub version: u64,
-    pub origin: String,
-    pub ctime: DateTime,
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub labels: HashMap<String, String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct DataObject<T> {
-    pub meta: Meta,
-    pub data: T,
-}
-
-impl<T> DataObject<T> {
-    pub fn from_obj(obj: Object, data: T) -> Self {
-        DataObject {
-            meta: obj.meta,
-            data: data,
+    fn from(data: DataObject<T>) -> Self {
+        Self {
+            manifest: data.manifest,
         }
     }
 }
 
+impl From<Manifest> for Object {
+    fn from(manifest: Manifest) -> Self {
+        Self { manifest: manifest }
+    }
+}
+
+/// Metadata that describes the content.
+///
+/// The manifest is used by application code that routes, stores, and processes data. It informs
+/// those processes about what type of data it is and what schema it implements, the identity of
+/// its origination point, and when it was sourced. It also carries arbitrary additional context as
+/// a set of key-value pair strings.
+///
+/// ## Example
+/// An example manifest in a variety of encoding formats.
+///
+/// ### YAML
+/// ```yaml
+/// manifest:
+///   domain: example.org
+///   scope: metrics/applications/some-app
+///   kind: useractions
+///   version: 2
+///   origin: some-app-03.example.org
+///   ctime: 2020-08-25T14:41:40Z
+///   labels:
+///     app-version: 2.3.1
+/// ```
+/// ### JSON
+/// ```json
+/// {
+///   "manifest": {
+///     "domain": "example.org",
+///     "scope": "metrics/applications/some-app",
+///     "kind": "useractions",
+///     "version": 2,
+///     "origin": "some-app-03.example.org",
+///     "ctime": "2020-08-25T14:41:40Z",
+///     "labels": {
+///       "app-version": "2.3.1"
+///     }
+///   }
+/// }
+/// ```
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Manifest {
+    /// A DNS name identifying the organization that defines the type's schema.
+    pub domain: String,
+
+    /// An arbitrary string acting as a namespace element, conventionally formatted as a path.
+    pub scope: String,
+
+    /// The name of the type.
+    pub kind: String,
+
+    /// The version of the type's schema.
+    pub version: u64,
+
+    /// The identity of the source of this content.
+    pub origin: String,
+
+    /// The UTC timestamp at which the message was created.
+    ///
+    /// This is not necessarily the timestamp at which the data was sourced, collected, or
+    /// otherwise obtained. Types requiring that degree of precision are responsible for conveying
+    /// that information themselves.
+    pub ctime: DateTime,
+
+    /// Arbitrary key-value string pairs that provide additional context. Optional.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub labels: HashMap<String, String>,
+}
+
+impl<T> From<DataObject<T>> for Manifest {
+    fn from(data: DataObject<T>) -> Self {
+        data.manifest
+    }
+}
+
+/// A complete data structure consisting of a manifest and the content.
+///
+/// All types derived from the `intermodal` scheme should be deserializable into a `DataObject`,
+/// once the specific derivative type has been determined.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DataObject<T> {
+    pub manifest: Manifest,
+    pub content: T,
+}
+
+impl<T> DataObject<T> {
+    /// Create a `DataObject` from an `Object` and some content.
+    pub fn from_obj(obj: Object, content: T) -> Self {
+        DataObject {
+            manifest: obj.manifest,
+            content: content,
+        }
+    }
+}
+
+/// An alias for the underlying `DateTime` type from `chrono`.
 pub type DateTime = chrono::DateTime<chrono::Utc>;
 
 #[cfg(test)]
@@ -109,14 +194,14 @@ mod tests {
 
         let cpu_obj: DataObject<CpuMetrics> = serde_json::from_str(&blob).unwrap();
 
-        assert_eq!(cpu_obj.meta.domain, "example.org");
-        assert_eq!(cpu_obj.meta.scope, "metrics");
-        assert_eq!(cpu_obj.meta.kind, "cpu");
-        assert_eq!(cpu_obj.meta.version, 1);
-        assert_eq!(cpu_obj.meta.labels.get("foo").unwrap(), "bar");
-        assert_eq!(cpu_obj.data.interval_seconds, 10);
-        assert_eq!(cpu_obj.data.idle_percent.len(), 6);
-        assert_eq!(cpu_obj.data.idle_percent[2], 85);
+        assert_eq!(cpu_obj.manifest.domain, "example.org");
+        assert_eq!(cpu_obj.manifest.scope, "metrics");
+        assert_eq!(cpu_obj.manifest.kind, "cpu");
+        assert_eq!(cpu_obj.manifest.version, 1);
+        assert_eq!(cpu_obj.manifest.labels.get("foo").unwrap(), "bar");
+        assert_eq!(cpu_obj.content.interval_seconds, 10);
+        assert_eq!(cpu_obj.content.idle_percent.len(), 6);
+        assert_eq!(cpu_obj.content.idle_percent[2], 85);
 
         let wrong_obj = serde_json::from_str::<DataObject<String>>(&blob);
         assert!(
@@ -130,9 +215,9 @@ mod tests {
 
         // DataObject::from_obj()
         let cpu_obj_2: DataObject<CpuMetrics> =
-            DataObject::from_obj(obj.clone(), cpu_obj.data.clone());
-        assert_eq!(cpu_obj_2.meta.ctime, cpu_obj.meta.ctime);
-        assert_eq!(cpu_obj_2.data.idle_percent, cpu_obj.data.idle_percent);
+            DataObject::from_obj(obj.clone(), cpu_obj.content.clone());
+        assert_eq!(cpu_obj_2.manifest.ctime, cpu_obj.manifest.ctime);
+        assert_eq!(cpu_obj_2.content.idle_percent, cpu_obj.content.idle_percent);
     }
 
     #[test]
@@ -153,26 +238,26 @@ mod tests {
 
         let netstat: DataObject<NetstatConnections> = serde_json::from_str(&jblob).unwrap();
 
-        assert_eq!(netstat.meta.scope, "connections");
-        assert_eq!(netstat.meta.kind, "netstat");
-        assert_eq!(netstat.data.connections.len(), 2);
+        assert_eq!(netstat.manifest.scope, "connections");
+        assert_eq!(netstat.manifest.kind, "netstat");
+        assert_eq!(netstat.content.connections.len(), 2);
         assert_eq!(
-            netstat.data.connections[0].local_addr,
+            netstat.content.connections[0].local_addr,
             Ipv4Addr::from_str("127.0.0.1").unwrap(),
         );
-        assert!(netstat.data.connections[0].remote_addr.is_none());
-        assert_eq!(netstat.data.connections[0].state, TcpState::Listen);
+        assert!(netstat.content.connections[0].remote_addr.is_none());
+        assert_eq!(netstat.content.connections[0].state, TcpState::Listen);
 
         // From/Into
         let _ = Object::from(netstat.clone());
         let obj: Object = netstat.clone().into();
 
         let netstat_2: DataObject<NetstatConnections> =
-            DataObject::from_obj(obj.clone(), netstat.data.clone());
-        assert_eq!(netstat_2.meta.ctime, netstat.meta.ctime);
+            DataObject::from_obj(obj.clone(), netstat.content.clone());
+        assert_eq!(netstat_2.manifest.ctime, netstat.manifest.ctime);
         assert_eq!(
-            netstat_2.data.connections.len(),
-            netstat.data.connections.len()
+            netstat_2.content.connections.len(),
+            netstat.content.connections.len()
         );
 
         let mut yfilepath = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -190,35 +275,35 @@ mod tests {
         );
 
         let netstat_y: DataObject<NetstatConnections> = serde_yaml::from_str(&yblob).unwrap();
-        assert_eq!(netstat_y.meta.ctime, netstat.meta.ctime);
+        assert_eq!(netstat_y.manifest.ctime, netstat.manifest.ctime);
         assert_eq!(
-            netstat_y.data.connections.len(),
-            netstat.data.connections.len()
+            netstat_y.content.connections.len(),
+            netstat.content.connections.len()
         );
-        for i in 0..netstat_y.data.connections.len() {
+        for i in 0..netstat_y.content.connections.len() {
             assert_eq!(
-                netstat_y.data.connections[i].local_addr,
-                netstat.data.connections[i].local_addr
+                netstat_y.content.connections[i].local_addr,
+                netstat.content.connections[i].local_addr
             );
             assert_eq!(
-                netstat_y.data.connections[i].local_port,
-                netstat.data.connections[i].local_port
+                netstat_y.content.connections[i].local_port,
+                netstat.content.connections[i].local_port
             );
             assert_eq!(
-                netstat_y.data.connections[i].remote_addr,
-                netstat.data.connections[i].remote_addr
+                netstat_y.content.connections[i].remote_addr,
+                netstat.content.connections[i].remote_addr
             );
             assert_eq!(
-                netstat_y.data.connections[i].remote_port,
-                netstat.data.connections[i].remote_port
+                netstat_y.content.connections[i].remote_port,
+                netstat.content.connections[i].remote_port
             );
             assert_eq!(
-                netstat_y.data.connections[i].state,
-                netstat.data.connections[i].state
+                netstat_y.content.connections[i].state,
+                netstat.content.connections[i].state
             );
             assert_eq!(
-                netstat_y.data.connections[i].pid,
-                netstat.data.connections[i].pid
+                netstat_y.content.connections[i].pid,
+                netstat.content.connections[i].pid
             );
         }
     }

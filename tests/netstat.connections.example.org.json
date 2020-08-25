@@ -1,5 +1,5 @@
 {
-  "meta": {
+  "manifest": {
     "domain": "example.org",
     "scope": "connections",
     "kind": "netstat",
@@ -7,7 +7,7 @@
     "origin": "foo.example.org",
     "ctime": "2020-08-25T12:10:45Z"
   },
-  "data": {
+  "content": {
     "connections": [
       {
         "local_addr": "127.0.0.1",
