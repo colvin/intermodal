@@ -8,22 +8,22 @@ use std::collections::HashMap;
 /// An elemental data structure consisting of only a manifest.
 ///
 /// All types derived from the `intermodal` scheme should be able to be deserialized into an
-/// `Object`. Generic data handlers can expect to deserialize messages into this type and use the
+/// `Header`. Generic data handlers can expect to deserialize messages into this type and use the
 /// manifest to determine a more precise type for the message.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Object {
+pub struct Header {
     pub manifest: Manifest,
 }
 
-impl<T> From<DataObject<T>> for Object {
-    fn from(data: DataObject<T>) -> Self {
+impl<T> From<Packet<T>> for Header {
+    fn from(data: Packet<T>) -> Self {
         Self {
             manifest: data.manifest,
         }
     }
 }
 
-impl From<Manifest> for Object {
+impl From<Manifest> for Header {
     fn from(manifest: Manifest) -> Self {
         Self { manifest: manifest }
     }
@@ -96,26 +96,26 @@ pub struct Manifest {
     pub labels: HashMap<String, String>,
 }
 
-impl<T> From<DataObject<T>> for Manifest {
-    fn from(data: DataObject<T>) -> Self {
+impl<T> From<Packet<T>> for Manifest {
+    fn from(data: Packet<T>) -> Self {
         data.manifest
     }
 }
 
 /// A complete data structure consisting of a manifest and the content.
 ///
-/// All types derived from the `intermodal` scheme should be deserializable into a `DataObject`,
+/// All types derived from the `intermodal` scheme should be deserializable into a `Packet`,
 /// once the specific derivative type has been determined.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct DataObject<T> {
+pub struct Packet<T> {
     pub manifest: Manifest,
     pub content: T,
 }
 
-impl<T> DataObject<T> {
-    /// Create a `DataObject` from an `Object` and some content.
-    pub fn from_obj(obj: Object, content: T) -> Self {
-        DataObject {
+impl<T> Packet<T> {
+    /// Create a `Packet` from an `Header` and some content.
+    pub fn from_obj(obj: Header, content: T) -> Self {
+        Packet {
             manifest: obj.manifest,
             content: content,
         }
@@ -183,16 +183,16 @@ mod tests {
         let blob = std::fs::read_to_string(filepath).unwrap();
 
         assert!(
-            serde_json::from_str::<Object>(&blob).is_ok(),
-            "deserializable to Object"
+            serde_json::from_str::<Header>(&blob).is_ok(),
+            "deserializable to Header"
         );
 
         assert!(
-            serde_json::from_str::<DataObject<CpuMetrics>>(&blob).is_ok(),
-            "deserializable to DataObject<CpuMetrics>",
+            serde_json::from_str::<Packet<CpuMetrics>>(&blob).is_ok(),
+            "deserializable to Packet<CpuMetrics>",
         );
 
-        let cpu_obj: DataObject<CpuMetrics> = serde_json::from_str(&blob).unwrap();
+        let cpu_obj: Packet<CpuMetrics> = serde_json::from_str(&blob).unwrap();
 
         assert_eq!(cpu_obj.manifest.domain, "example.org");
         assert_eq!(cpu_obj.manifest.scope, "metrics");
@@ -203,19 +203,15 @@ mod tests {
         assert_eq!(cpu_obj.content.idle_percent.len(), 6);
         assert_eq!(cpu_obj.content.idle_percent[2], 85);
 
-        let wrong_obj = serde_json::from_str::<DataObject<String>>(&blob);
-        assert!(
-            wrong_obj.is_err(),
-            "not convertable to incompatible DataObject"
-        );
+        let wrong_obj = serde_json::from_str::<Packet<String>>(&blob);
+        assert!(wrong_obj.is_err(), "not convertable to incompatible Packet");
 
-        // From/Into works DataObject --> to Object
-        let _ = Object::from(cpu_obj.clone());
-        let obj: Object = cpu_obj.clone().into();
+        // From/Into works Packet --> to Header
+        let _ = Header::from(cpu_obj.clone());
+        let obj: Header = cpu_obj.clone().into();
 
-        // DataObject::from_obj()
-        let cpu_obj_2: DataObject<CpuMetrics> =
-            DataObject::from_obj(obj.clone(), cpu_obj.content.clone());
+        // Packet::from_obj()
+        let cpu_obj_2: Packet<CpuMetrics> = Packet::from_obj(obj.clone(), cpu_obj.content.clone());
         assert_eq!(cpu_obj_2.manifest.ctime, cpu_obj.manifest.ctime);
         assert_eq!(cpu_obj_2.content.idle_percent, cpu_obj.content.idle_percent);
     }
@@ -227,16 +223,16 @@ mod tests {
         let jblob = std::fs::read_to_string(jfilepath).unwrap();
 
         assert!(
-            serde_json::from_str::<Object>(&jblob).is_ok(),
-            "json deserializable to Object"
+            serde_json::from_str::<Header>(&jblob).is_ok(),
+            "json deserializable to Header"
         );
 
         assert!(
-            serde_json::from_str::<DataObject<NetstatConnections>>(&jblob).is_ok(),
-            "json deserializable to DataObject<NetstatConnections>"
+            serde_json::from_str::<Packet<NetstatConnections>>(&jblob).is_ok(),
+            "json deserializable to Packet<NetstatConnections>"
         );
 
-        let netstat: DataObject<NetstatConnections> = serde_json::from_str(&jblob).unwrap();
+        let netstat: Packet<NetstatConnections> = serde_json::from_str(&jblob).unwrap();
 
         assert_eq!(netstat.manifest.scope, "connections");
         assert_eq!(netstat.manifest.kind, "netstat");
@@ -249,11 +245,11 @@ mod tests {
         assert_eq!(netstat.content.connections[0].state, TcpState::Listen);
 
         // From/Into
-        let _ = Object::from(netstat.clone());
-        let obj: Object = netstat.clone().into();
+        let _ = Header::from(netstat.clone());
+        let obj: Header = netstat.clone().into();
 
-        let netstat_2: DataObject<NetstatConnections> =
-            DataObject::from_obj(obj.clone(), netstat.content.clone());
+        let netstat_2: Packet<NetstatConnections> =
+            Packet::from_obj(obj.clone(), netstat.content.clone());
         assert_eq!(netstat_2.manifest.ctime, netstat.manifest.ctime);
         assert_eq!(
             netstat_2.content.connections.len(),
@@ -265,16 +261,16 @@ mod tests {
         let yblob = std::fs::read_to_string(yfilepath).unwrap();
 
         assert!(
-            serde_yaml::from_str::<Object>(&yblob).is_ok(),
-            "yaml deserializable to Object"
+            serde_yaml::from_str::<Header>(&yblob).is_ok(),
+            "yaml deserializable to Header"
         );
 
         assert!(
-            serde_yaml::from_str::<DataObject<NetstatConnections>>(&yblob).is_ok(),
-            "yaml deserializable to DataObject<NetstatConnections>"
+            serde_yaml::from_str::<Packet<NetstatConnections>>(&yblob).is_ok(),
+            "yaml deserializable to Packet<NetstatConnections>"
         );
 
-        let netstat_y: DataObject<NetstatConnections> = serde_yaml::from_str(&yblob).unwrap();
+        let netstat_y: Packet<NetstatConnections> = serde_yaml::from_str(&yblob).unwrap();
         assert_eq!(netstat_y.manifest.ctime, netstat.manifest.ctime);
         assert_eq!(
             netstat_y.content.connections.len(),
