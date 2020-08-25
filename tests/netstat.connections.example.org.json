@@ -1,0 +1,30 @@
+{
+  "meta": {
+    "domain": "example.org",
+    "scope": "connections",
+    "kind": "netstat",
+    "version": 1,
+    "origin": "foo.example.org",
+    "ctime": "2020-08-25T12:10:45Z"
+  },
+  "data": {
+    "connections": [
+      {
+        "local_addr": "127.0.0.1",
+        "local_port": 22,
+        "remote_addr": null,
+        "remote_port": null,
+        "state": "LISTEN",
+        "pid": 579
+      },
+      {
+        "local_addr": "192.168.1.102",
+        "local_port": 43026,
+        "remote_addr": "208.80.154.224",
+        "remote_port": 443,
+        "state": "ESTABLISHED",
+        "pid": 1410
+      }
+    ]
+  }
+}

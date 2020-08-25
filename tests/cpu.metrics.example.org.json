@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "domain": "example.org",
+    "scope": "metrics",
+    "kind": "cpu",
+    "version": 1,
+    "origin": "cargo test",
+    "ctime": "2020-08-24T16:03:18Z",
+    "labels": {
+      "foo": "bar"
+    }
+  },
+  "data": {
+    "begin": "2020-08-24T16:01:18Z",
+    "end": "2020-08-24T16:02:18Z",
+    "interval_seconds": 10,
+    "idle_percent": [
+      96,
+      96,
+      85,
+      72,
+      78,
+      81
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+[package]
+name = "intermodal"
+version = "0.1.0"
+authors = ["colvin <39858617+colvin@users.noreply.github.com>"]
+edition = "2018"
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"
+serde_yaml = "0.8"
